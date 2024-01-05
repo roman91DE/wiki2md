@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/JohannesKaufmann/html-to-markdown"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -18,7 +20,7 @@ var outputFile = flag.String("output", "", "path to output file (default stdout)
 var searchWords = flag.String("search", "", "search word, use comma to separate multiple words")
 
 // the base URL for the wikipedia page
-const baseURL = "en.wikipedia.org/wiki/"
+const baseURL = "http://en.wikipedia.org/wiki/"
 
 func main() {
 	// parse the command line options
@@ -34,40 +36,69 @@ func main() {
 		f, err := os.OpenFile(*outputFile, os.O_WRONLY|os.O_CREATE, 0666)
 
 		if err != nil {
-			fmt.Println("Error opening file:", err)
-			os.Exit(1)
+			fmt.Println("Error opening file:", *outputFile)
+			log.Fatal(err)
 		}
 		outputStream = f
 		defer f.Close()
 	}
 
 	// get the list of search words
-	words := strings.Split(*searchWords, ",")
+	wordStr := strings.ReplaceAll(*searchWords, " ", "")
+	words := strings.Split(wordStr, ",")
 	numWords := len(words)
+
+	// fetch the wiki pages concurrently
+	for _, word := range words {
+		go fetchAndConvertWikiPage(word, ch)
+	}
+
+	// write the markdown to the output file
+	for i := 0; i < numWords; i++ {
+		fmt.Fprintln(outputStream, <-ch)
+	}
 
 }
 
 func fetchWikiPage(word string) string {
-    // build the URL
-    url := baseURL + word
+	// build the URL
+	url := baseURL + word
 
-    // fetch the page
-    resp, err := http.Get(url)
+	// fetch the page
+	resp, err := http.Get(url)
 
-    if err != nil {
-        fmt.Println("Error fetching page:", err)
-        return fmt.Sprintf("HTML Status Code %v while fetching Page for %v", resp.StatusCode, word)
-    }
+	if err != nil {
+		fmt.Println("Error fetching page:", url)
+		log.Fatal(err)
+	}
 
-    defer resp.Body.Close()
-    rc := resp.Body
+	defer resp.Body.Close()
+	rc := resp.Body
 
-    bodyBytes, err := io.ReadAll(rc)
-    if err != nil {
-        fmt.Println("Error reading response body:", err)
-        return ""
-    }
+	bodyBytes, err := io.ReadAll(rc)
+	if err != nil {
+		fmt.Println("Error reading response body")
+		return ""
+	}
 
-    bodyStringHTML := string(bodyBytes)
-    return bodyString
+	return string(bodyBytes)
+}
+
+func convertWikiPageToMarkdown(page string) string {
+	// convert the page to markdown
+	converter := md.NewConverter("", true, nil)
+	markdown, err := converter.ConvertString(page)
+
+	if err != nil {
+		fmt.Println("Error converting page to markdown")
+		return ""
+	}
+
+	return markdown
+}
+
+func fetchAndConvertWikiPage(word string, ch chan string) {
+	page := fetchWikiPage(word)
+	markdown := convertWikiPageToMarkdown(page)
+	ch <- markdown
 }
