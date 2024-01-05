@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -20,7 +21,7 @@ var outputFile = flag.String("output", "", "path to output file (default stdout)
 var searchWords = flag.String("search", "", "search word, use comma to separate multiple words")
 
 // the base URL for the wikipedia page
-const baseURL = "http://en.wikipedia.org/wiki/"
+const wikiAPIBaseURL = "https://en.wikipedia.org/w/api.php"
 
 func main() {
 	// parse the command line options
@@ -60,9 +61,20 @@ func main() {
 
 }
 
+func buildSearchURL(word string) string {
+    params := url.Values{}
+    params.Add("action", "parse")
+    params.Add("format", "json")
+    params.Add("page", word)
+    params.Add("prop", "text")
+    params.Add("formatversion", "2")
+
+    return fmt.Sprintf("%s?%s", wikiAPIBaseURL, params.Encode())
+}
+
 func fetchWikiPage(word string) string {
 	// build the URL
-	url := baseURL + word
+	url := buildSearchURL(word)
 
 	// fetch the page
 	resp, err := http.Get(url)
